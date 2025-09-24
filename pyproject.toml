@@ -17,9 +17,14 @@ dependencies = [
     "isort (>=6.0.1,<7.0.0)",
     "pytest (>=8.4.2,<9.0.0)",
     "langchainhub (>=0.1.21,<0.2.0)",
-    "langchain-community (>=0.3.29,<0.4.0)"
+    "langchain-community (>=0.3.29,<0.4.0)",
+    "langchain-openai (>=0.3.33,<0.4.0)",
+    "openai (>=1.109.0,<2.0.0)"
 ]
 
+
+[project.scripts]
+travel-helper = "main:main"
 
 [build-system]
 requires = ["poetry-core"]
