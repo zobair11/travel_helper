@@ -1,16 +1,13 @@
-from dotenv import load_dotenv
-import os
-import sys
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage
+from state import TravelState
+from graph import app
 
-load_dotenv()
+def main():
+    init_state: TravelState = {"started": False}
+    final_state = app.invoke(init_state)
 
-def ask_llm(query: str, system: str = "You are a concise, helpful assistant.") -> str:
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
-    res = llm.invoke([SystemMessage(content=system), HumanMessage(content=query)])
-    return res.content
+    print("\nCollected Travel Info:")
+    for k in ["location", "checkin", "checkout", "adults", "children", "rooms"]:
+        print(f"{k}: {final_state.get(k)}")
 
 if __name__ == "__main__":
-    query = " ".join(sys.argv[1:])
-    print(ask_llm(query))
+    main()
