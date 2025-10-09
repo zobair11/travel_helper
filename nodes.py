@@ -1,4 +1,3 @@
-# nodes.py
 import re
 import json
 from datetime import datetime
@@ -62,7 +61,7 @@ def map_user_answer_node(state: TravelState) -> TravelState:
     answer = state.get("last_user_msg") or ""
     last_q = (state.get("last_question") or "").lower()
 
-    # Map destination answers directly to location to avoid LLM misses
+    
     if re.search(r"\b(destination|travel destination|city)\b", last_q):
         ans = answer.strip()
         if ans:
@@ -216,7 +215,7 @@ def validator_node(state: TravelState) -> TravelState:
     for k in ["location", "checkin", "checkout", "stay_days", "adults", "children", "rooms"]:
         state[k] = cf.get(k)
 
-    # Geocode; if it fails, clear location and ask for a better one
+    
     if state.get("location") and (state.get("lat") is None or state.get("lng") is None):
         loc = state["location"]
         coords = geocode_location(loc)
@@ -231,7 +230,7 @@ def validator_node(state: TravelState) -> TravelState:
                 )
             errors.append(f"Could not geocode location: '{loc}'.")
 
-    # Clear stale destination ask if location present now
+    
     if state.get("location") and ask and "destination" in ask.lower():
         ask = None
 
