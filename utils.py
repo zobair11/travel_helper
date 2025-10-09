@@ -1,15 +1,23 @@
 import re
 import json
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 import dateparser
 import zoneinfo
+import requests
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from config import DATE_FMT
+from config import (
+    GEOCODER_NOMINATIM_BASE_URL,
+    GEOCODER_NOMINATIM_USER_AGENT,
+    GEOCODER_NOMINATIM_EMAIL,
+)
 
 LOCAL_TZ = zoneinfo.ZoneInfo("America/Toronto")
+
+_geocode_cache: Dict[str, Tuple[float, float]] = {}
 
 
 def parse_date(text: Optional[str]) -> Optional[str]:
@@ -79,3 +87,41 @@ def ask_json(llm: ChatOpenAI, system_prompt: str, user_prompt: str, fallback: Di
         return json.loads(raw)
     except Exception:
         return fallback
+
+def geocode_location(query: Optional[str]) -> Optional[Tuple[float, float]]:
+    """
+    Return (lat, lng) using Nominatim or None if not found.
+    Why: downstream APIs often need coordinates; failure is non-fatal.
+    """
+    if not query or not str(query).strip():
+        return None
+    key = str(query).strip().lower()
+    if key in _geocode_cache:
+        return _geocode_cache[key]
+
+    params = {
+        "q": query,
+        "format": "json",
+        "addressdetails": 0,
+        "limit": 1,
+        "email": GEOCODER_NOMINATIM_EMAIL or "",
+    }
+    headers = {"User-Agent": GEOCODER_NOMINATIM_USER_AGENT}
+    try:
+        r = requests.get(GEOCODER_NOMINATIM_BASE_URL, params=params, headers=headers, timeout=10)
+        if r.status_code != 200:
+            return None
+        data = r.json() or []
+        if not data:
+            return None
+        lat, lon = data[0].get("lat"), data[0].get("lon")
+        lat_f = float(lat) if lat is not None else None
+        lon_f = float(lon) if lon is not None else None
+        if lat_f is None or lon_f is None:
+            return None
+        if not (-90.0 <= lat_f <= 90.0 and -180.0 <= lon_f <= 180.0):
+            return None
+        _geocode_cache[key] = (lat_f, lon_f)
+        return _geocode_cache[key]
+    except Exception:
+        return None

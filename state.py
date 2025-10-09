@@ -8,6 +8,8 @@ class TravelState(TypedDict, total=False):
     adults: Optional[int]
     children: Optional[int]
     rooms: Optional[int]
+    lat: Optional[float]
+    lng: Optional[float]
 
 
     ask: Optional[str]

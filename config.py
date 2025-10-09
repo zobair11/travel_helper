@@ -20,3 +20,7 @@ validator_llm = ChatOpenAI(
     temperature=0,
     api_key=os.getenv("OPENAI_API_KEY")
 )
+
+GEOCODER_NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
+GEOCODER_NOMINATIM_USER_AGENT = "travel-assistant/1.0 (contact: you@example.com)"
+GEOCODER_NOMINATIM_EMAIL = "you@example.com"
