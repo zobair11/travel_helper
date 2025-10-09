@@ -39,7 +39,7 @@ Tasks:
 5) If something else is missing/invalid:
    - Try to auto-fix (e.g., infer checkout from stay_days).
    - Otherwise, ask ONE concise follow-up question in "ask".
-6) ALWAYS ask for adults and children together in a single question. Never ask about adults or children separately.
+6) ALWAYS ask for adults and children together in a single question. Never ask about adults or children separately. If adults is present but children is missing → set children = 0 and DO NOT ask.
    Example: "How many adults and children will be staying?"
 
 Output STRICT JSON ONLY:

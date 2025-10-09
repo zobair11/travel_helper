@@ -1,3 +1,4 @@
+# nodes.py
 import re
 import json
 from datetime import datetime
@@ -6,13 +7,10 @@ from typing import Any
 from state import TravelState
 from config import input_llm, validator_llm, DATE_FMT, REQUIRED_FIELDS
 from prompts import INPUT_AGENT_SYS, VALIDATOR_AGENT_SYS
-from utils import parse_int_like, ask_json, ensure_checkout
+from utils import parse_int_like, ask_json, ensure_checkout, geocode_location
 
 
 def start_or_prompt(state: TravelState) -> TravelState:
-    """
-    Start node: if not started, ask for the initial travel request.
-    """
     if not state.get("started"):
         msg = input("Enter your travel request: ")
         state["last_user_msg"] = msg
@@ -28,7 +26,7 @@ def input_agent_node(state: TravelState) -> TravelState:
         "stay_days": state.get("stay_days"),
         "adults": state.get("adults"),
         "children": state.get("children"),
-        "rooms": state.get("rooms")
+        "rooms": state.get("rooms"),
     }
     user_input = state.get("last_user_msg") or ""
 
@@ -40,7 +38,7 @@ Return JSON ONLY.'''
         input_llm,
         INPUT_AGENT_SYS,
         ia_user,
-        fallback={"ask": None, "update_fields": {}}
+        fallback={"ask": None, "update_fields": {}},
     )
 
     for k, v in ia.get("update_fields", {}).items():
@@ -64,19 +62,33 @@ def map_user_answer_node(state: TravelState) -> TravelState:
     answer = state.get("last_user_msg") or ""
     last_q = (state.get("last_question") or "").lower()
 
+    # Map destination answers directly to location to avoid LLM misses
+    if re.search(r"\b(destination|travel destination|city)\b", last_q):
+        ans = answer.strip()
+        if ans:
+            state["location"] = ans
+            return state
+
     updated = False
 
-    if re.search(r"\badults?\b", last_q) or re.search(r"\brooms?\b", last_q) or re.search(r"\bchild(ren)?\b", last_q):
+    if (
+        re.search(r"\badults?\b", last_q)
+        or re.search(r"\brooms?\b", last_q)
+        or re.search(r"\bchild(ren)?\b", last_q)
+    ):
         m_adults = re.search(r"(\d+)\s*adults?", answer, flags=re.I)
-        m_rooms  = re.search(r"(\d+)\s*rooms?",  answer, flags=re.I)
-        m_kids   = re.search(r"(\d+)\s*child(?:ren)?", answer, flags=re.I)
+        m_rooms = re.search(r"(\d+)\s*rooms?", answer, flags=re.I)
+        m_kids = re.search(r"(\d+)\s*child(?:ren)?", answer, flags=re.I)
 
         if m_adults:
-            state["adults"] = max(1, int(m_adults.group(1))); updated = True
+            state["adults"] = max(1, int(m_adults.group(1)))
+            updated = True
         if m_rooms:
-            state["rooms"] = max(1, int(m_rooms.group(1)));   updated = True
+            state["rooms"] = max(1, int(m_rooms.group(1)))
+            updated = True
         if m_kids:
-            state["children"] = max(0, int(m_kids.group(1))); updated = True
+            state["children"] = max(0, int(m_kids.group(1)))
+            updated = True
 
         if updated:
             return state
@@ -84,11 +96,14 @@ def map_user_answer_node(state: TravelState) -> TravelState:
     n = parse_int_like(answer)
     if n is not None:
         if re.search(r"\badults?\b", last_q) and state.get("adults") in (None, ""):
-            state["adults"] = max(1, n); return state
+            state["adults"] = max(1, n)
+            return state
         if re.search(r"\brooms?\b", last_q) and state.get("rooms") in (None, ""):
-            state["rooms"] = max(1, n); return state
+            state["rooms"] = max(1, n)
+            return state
         if re.search(r"\bchild(ren)?\b", last_q):
-            state["children"] = max(0, n); return state
+            state["children"] = max(0, n)
+            return state
 
     collected = {
         "location": state.get("location"),
@@ -109,7 +124,7 @@ def map_user_answer_node(state: TravelState) -> TravelState:
             f'Current collected: {json.dumps(collected, ensure_ascii=False)}\n'
             'Update ONLY the field(s) that were asked, in "update_fields".'
         ),
-        fallback={"ask": None, "update_fields": {}}
+        fallback={"ask": None, "update_fields": {}},
     )
 
     for k, v in map_resp.get("update_fields", {}).items():
@@ -126,14 +141,14 @@ def validator_node(state: TravelState) -> TravelState:
         "stay_days": state.get("stay_days"),
         "adults": state.get("adults"),
         "children": state.get("children"),
-        "rooms": state.get("rooms")
+        "rooms": state.get("rooms"),
     }
 
     v = ask_json(
         validator_llm,
         VALIDATOR_AGENT_SYS,
         f"Fields to validate: {json.dumps(collected, ensure_ascii=False)}\nReturn JSON ONLY.",
-        fallback={"clean_fields": collected, "errors": [], "ask": None}
+        fallback={"clean_fields": collected, "errors": [], "ask": None},
     )
 
     cf = v.get("clean_fields", {}) or {}
@@ -179,7 +194,6 @@ def validator_node(state: TravelState) -> TravelState:
         except Exception:
             errors.append("Invalid date format; expected YYYY-MM-DD.")
 
-
     def is_missing(name: str, val: Any) -> bool:
         if name in ("adults", "rooms"):
             return val is None
@@ -199,9 +213,27 @@ def validator_node(state: TravelState) -> TravelState:
             None
         )
 
-
     for k in ["location", "checkin", "checkout", "stay_days", "adults", "children", "rooms"]:
         state[k] = cf.get(k)
+
+    # Geocode; if it fails, clear location and ask for a better one
+    if state.get("location") and (state.get("lat") is None or state.get("lng") is None):
+        loc = state["location"]
+        coords = geocode_location(loc)
+        if coords:
+            state["lat"], state["lng"] = coords
+        else:
+            state["location"] = None
+            if not ask:
+                ask = (
+                    f"I couldn’t find '{loc}'. "
+                    "Please provide a valid travel destination (city and country), e.g., 'Rome, Italy'."
+                )
+            errors.append(f"Could not geocode location: '{loc}'.")
+
+    # Clear stale destination ask if location present now
+    if state.get("location") and ask and "destination" in ask.lower():
+        ask = None
 
     state["errors"] = errors
     state["ask"] = ask
