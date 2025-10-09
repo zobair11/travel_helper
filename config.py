@@ -22,5 +22,5 @@ validator_llm = ChatOpenAI(
 )
 
 GEOCODER_NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
-GEOCODER_NOMINATIM_USER_AGENT = "travel-assistant/1.0 (contact: you@example.com)"
-GEOCODER_NOMINATIM_EMAIL = "you@example.com"
+GEOCODER_NOMINATIM_USER_AGENT = "travel-assistant/1.0 (contact: abc@gmail.com)"
+GEOCODER_NOMINATIM_EMAIL = "abc@gmail.com"
